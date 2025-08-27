@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>MeetPoint · 모임 중간지점 · ETA 추천</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="" crossorigin=""/>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+  <!-- 헤더 -->
+  <header class="topbar">
+    <div class="brand">MeetPoint</div>
+    <div class="status">
+      <span id="health-dot" class="dot gray"></span>
+      <span id="health-text" class="muted">서버 확인 중…</span>
+    </div>
+  </header>
+
+  <!-- 히어로 -->
+  <section class="hero">
+    <h1>모임 중간지점 · ETA 추천</h1>
+    <p class="muted">버튼 하나로 바로 시작하세요. 필요할 때만 입력란이 나타납니다.</p>
+    <div class="hero-actions">
+      <button id="btnOpenCreate" class="btn-lg">방 만들기</button>
+      <button id="btnOpenJoin" class="btn-lg btn-outline">방 참가하기</button>
+    </div>
+  </section>
+
+  <!-- 본문 레이아웃 -->
+  <main class="container">
+    <div class="grid">
+      <!-- LEFT: 지도 + 컨트롤 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <strong>지도</strong>
+            <div class="panel-actions">
+              <input id="locSearch" type="text" placeholder="내 위치 검색 (예: 서울역, 강남구청)"/>
+              <button id="btnLocSearch" class="btn-sm">검색</button>
+              <button id="btnGeo" class="btn-sm">내 위치</button>
+              <button id="btnPick" class="btn-sm">지도에서 선택</button>
+            </div>
+          </div>
+          <div id="map" class="map"></div>
+          <div id="locResults" class="popover"></div>
+          <div class="sub muted" id="geoStatus">위치 미설정</div>
+
+          <!-- 숨김: 위도/경도 값은 화면에 노출하지 않음 -->
+          <input id="myLat" type="hidden"/>
+          <input id="myLng" type="hidden"/>
+
+          <div class="toolbar">
+            <label>이동수단
+              <select id="myMode">
+                <option value="car">자차</option>
+                <option value="subway">지하철</option>
+                <option value="bus">버스</option>
+                <option value="walk">도보</option>
+              </select>
+            </label>
+            <button id="btnUpdate" class="btn">내 위치/모드 서버에 저장</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="toolbar">
+            <label>ETA 반경(m) <input id="etaRadius" type="number" value="2000" min="200" step="100"/></label>
+            <label>상위 후보 <input id="topN" type="number" value="5" min="1" max="16"/></label>
+            <button id="btnEta" class="btn">중간지점(ETA) 계산</button>
+            <span id="etaSummary" class="muted"></span>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="toolbar wrap">
+            <label>카테고리
+              <select id="cat">
+                <option value="FD6">음식점</option>
+                <option value="CE7">카페</option>
+                <option value="BAR">술집(바/펍)</option>
+                <option value="PUB">펍</option>
+                <option value="AD5">숙박</option>
+              </select>
+            </label>
+            <label>반경(m) <input id="radius" type="number" value="2000" min="300" step="100"/></label>
+            <label>키워드 <input id="q" type="text" placeholder="예: 파스타, 삼겹살"/></label>
+            <button id="btnSuggest" class="btn">추천 가져오기</button>
+            <button id="btnShowSaved" class="btn-ghost">마지막 결과 보기</button>
+            <button id="btnRefresh" class="btn-ghost">새로고침</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: 방/참가자/추천 -->
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <strong>방 정보</strong>
+          </div>
+          <div class="info">
+            <div><span class="label">코드</span> <span id="codeLabel" class="mono"></span></div>
+            <div><span class="label">초대링크</span> <a id="joinUrl" href="#" target="_blank">-</a> <button id="btnCopyLink" class="btn-sm">복사</button></div>
+            <div><span class="label">HostSecret</span> <span id="hostSecretLabel" class="mono">-</span></div>
+            <div><span class="label">PID</span> <span id="pidLabel" class="mono">-</span></div>
+            <div><span class="label">메타</span> <span id="metaText" class="mono">-</span></div>
+            <div><span class="label">Centroid</span> <span id="centroidText" class="mono">-</span></div>
+          </div>
+
+          <div class="toolbar">
+            <input id="hostSecretInput" type="text" placeholder="HostSecret (방장만 사용)"/>
+            <button id="btnLeave" class="btn-ghost">방 나가기</button>
+            <button id="btnClose" class="btn-danger">방 닫기</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="table-wrap">
+            <div class="table-head">참가자</div>
+            <table id="participantsTable" class="table">
+              <thead><tr><th>PID</th><th>닉네임</th><th>이동수단</th><th>업데이트</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="table-head">
+            <strong id="suggestCount">-</strong>
+          </div>
+          <div id="suggestList" class="cards"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Sheet: 방 만들기 -->
+  <section id="sheetCreate" class="sheet" aria-hidden="true">
+    <div class="sheet-body">
+      <div class="sheet-head">
+        <strong>방 만들기</strong>
+        <button id="closeCreate" class="icon">✕</button>
+      </div>
+      <div class="form">
+        <label>목적(purpose)
+          <input id="purpose" type="text" placeholder="예: 점심 / 회의"/>
+        </label>
+        <label>모임 시간(시:분)
+  <input id="meetingTime" type="time" step="60" placeholder="예: 19:00"/>
+</label>
+<!-- *설명: 오늘 날짜 기준으로 서버에 저장됩니다. -->
+        <button id="btnCreate" class="btn-lg">생성</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sheet: 방 참가 -->
+  <section id="sheetJoin" class="sheet" aria-hidden="true">
+    <div class="sheet-body">
+      <div class="sheet-head">
+        <strong>방 참가하기</strong>
+        <button id="closeJoin" class="icon">✕</button>
+      </div>
+      <div class="form">
+        <label>방 코드
+          <input id="code" type="text" placeholder="예: 6자리 코드"/>
+        </label>
+        <label>닉네임
+          <input id="nickname" type="text" placeholder="예: 민트캣"/>
+        </label>
+        <button id="btnJoin" class="btn-lg">참가</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="" crossorigin=""></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>
